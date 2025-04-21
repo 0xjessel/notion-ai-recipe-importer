@@ -1,8 +1,10 @@
 # Notion AI Recipe Importer
 
+<img src="images/icon128.png" alt="Notion AI Recipe Importer Icon" width="80" align="left" style="margin-right: 15px; margin-bottom: 20px;">
+
 A Chrome extension that extracts recipes from any website with one click and imports them directly into your Notion database using Claude AI.
 
-<img src="images/icon128.png" alt="Notion AI Recipe Importer Icon" width="80" align="left" style="margin-right: 15px; margin-bottom: 15px;">
+<br clear="all">
 
 ## Screenshots
 
