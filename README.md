@@ -10,7 +10,7 @@ A Chrome extension that extracts recipes from any website with one click and imp
 
 <table>
   <tr>
-    <td width="33%"><img src="images/screenshots/extension popup.png" alt="Extension Popup" width="100%"></td>
+    <td width="33%"><img src="images/screenshots/extension popup.png?v=2" alt="Extension Popup" width="100%"></td>
     <td width="33%"><img src="images/screenshots/extension settings.png" alt="Extension Settings" width="100%"></td>
     <td width="33%"><img src="images/screenshots/notion recipe.png" alt="Notion Recipe Page" width="100%"></td>
   </tr>
