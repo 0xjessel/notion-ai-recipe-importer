@@ -64,7 +64,7 @@ async function processRecipe(recipeData, tabId) {
     // Show notification for completed import
     chrome.notifications.create({
       type: 'basic',
-      iconUrl: '/images/icon128.png',
+      iconUrl: chrome.runtime.getURL('images/icon128.png'),
       title: 'Recipe Import Complete',
       message: 'Your recipe has been successfully imported to Notion!',
       priority: 2
@@ -77,7 +77,7 @@ async function processRecipe(recipeData, tabId) {
     // Show notification for error
     chrome.notifications.create({
       type: 'basic',
-      iconUrl: '/images/icon128.png',
+      iconUrl: chrome.runtime.getURL('images/icon128.png'),
       title: 'Recipe Import Failed',
       message: `Error: ${error.message}`,
       priority: 2
@@ -940,7 +940,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Show notification for canceled operation
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: '/images/icon128.png',
+        iconUrl: chrome.runtime.getURL('images/icon128.png'),
         title: 'Recipe Import Canceled',
         message: 'Recipe import was canceled',
         priority: 1
