@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Notion AI Recipe Importer - Settings</title>
+  <link rel="stylesheet" href="css/options.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Notion AI Recipe Importer Settings</h1>
+    
+    <form id="settingsForm">
+      <div class="form-group">
+        <label for="claudeApiKey">Claude API Key</label>
+        <div class="input-container">
+          <input type="password" id="claudeApiKey" name="claudeApiKey" placeholder="sk-ant-...">
+          <button type="button" class="toggle-visibility" data-for="claudeApiKey">
+            <span class="eye-icon">•••</span>
+          </button>
+        </div>
+        <div class="input-feedback" id="claudeApiKeyFeedback"></div>
+      </div>
+      
+      <div class="form-group">
+        <label for="notionToken">Notion Integration Token</label>
+        <div class="input-container">
+          <input type="password" id="notionToken" name="notionToken" placeholder="secret_... or ntn_...">
+          <button type="button" class="toggle-visibility" data-for="notionToken">
+            <span class="eye-icon">•••</span>
+          </button>
+        </div>
+        <div class="input-feedback" id="notionTokenFeedback"></div>
+      </div>
+      
+      <div class="form-group">
+        <label for="notionDatabaseId">Notion Database ID</label>
+        <div class="input-container">
+          <input type="password" id="notionDatabaseId" name="notionDatabaseId" placeholder="32-character hex string or hyphenated UUID">
+          <button type="button" class="toggle-visibility" data-for="notionDatabaseId">
+            <span class="eye-icon">•••</span>
+          </button>
+        </div>
+        <div class="input-feedback" id="notionDatabaseIdFeedback"></div>
+      </div>
+      
+      <div class="buttons-row">
+        <button type="button" id="testConnectionBtn">Test Connection</button>
+        <button type="submit" id="saveBtn">Save Settings</button>
+      </div>
+      
+      <div class="status" id="status"></div>
+    </form>
+    
+    <div class="help-section">
+      <h2>How to get your API credentials</h2>
+      
+      <h3>Claude API Key</h3>
+      <p>
+        1. Go to <a href="https://console.anthropic.com" target="_blank">Claude API Console</a><br>
+        2. Create an account or log in<br>
+        3. In the dashboard, create a new API key<br>
+        4. Copy the API key (it starts with "sk-ant-")
+      </p>
+      
+      <h3>Notion Integration Token</h3>
+      <p>
+        1. Go to <a href="https://www.notion.so/my-integrations" target="_blank">Notion Integrations</a><br>
+        2. Create a new integration<br>
+        3. Copy the "Internal Integration Token"<br>
+        4. Add the integration to your recipe database in Notion (see Database ID section below for details)
+      </p>
+      
+      <h3>Notion Database ID</h3>
+      <p>
+        1. Open your recipe database in Notion<br>
+        2. Look at the URL format: https://www.notion.so/username/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx<br>
+        3. The ID is the 32-character hex string in the URL (like "7f2b1d5c6e394832a1d8b9c0f4e2d607")<br>
+        4. <strong>IMPORTANT:</strong> You MUST share the database with your integration:<br>
+           - Click the "..." (three dots) in the top-right corner of your database<br>
+           - Select "Add connections"<br>
+           - Find and select your integration (the one you created at notion.so/my-integrations)<br>
+           - Without this step, the extension cannot access your database
+      </p>
+    </div>
+  </div>
+  
+  <script src="js/options.js"></script>
+</body>
+</html>
