@@ -185,68 +185,186 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!tab) {
           throw new Error("Cannot access current tab");
         }
-        
-        console.log('Executing script in tab:', tab.id);
-        
-        // Use chrome.scripting API to extract page content
-        chrome.scripting.executeScript(
-          {
-            target: { tabId: tab.id },
-            func: function() {
-              return {
-                url: window.location.href,
-                html: document.documentElement.outerHTML
-              };
-            }
-          },
-          (results) => {
-            console.log('Script execution results:', results);
-            
-            if (chrome.runtime.lastError) {
-              console.error('Script execution error:', chrome.runtime.lastError);
-              statusElement.textContent = 'Cannot access this page content. Try a recipe website.';
-              statusElement.classList.add('error');
-              importButton.disabled = false;
-              return;
-            }
-            
-            if (results && results[0] && results[0].result) {
-              // We have the data, send it directly to background script
-              statusElement.textContent = 'Processing... Please wait';
-              
-              // Start processing and store that we've initiated the process with timestamp
-              chrome.storage.local.set({ 
-                'processingRecipe': true,
-                'processingStartTime': Date.now()
-              }, () => {
-                // Show cancel button
-                cancelButton.style.display = 'block';
-                
-                console.log('Sending data to background script:', {
-                  action: 'processRecipe',
-                  dataSize: JSON.stringify(results[0].result).length
-                });
-                
-                chrome.runtime.sendMessage({
-                  action: 'processRecipe',
-                  data: results[0].result
-                }, response => {
-                  if (chrome.runtime.lastError) {
-                    console.error('Error sending message to background:', chrome.runtime.lastError);
-                  } else if (response) {
-                    console.log('Background script response:', response);
-                  } else {
-                    console.log('Message sent to background, no response');
+        console.log('Active tab URL:', tab.url);
+        // Check if this is a YouTube video URL
+        const youtubeRegex = /^https:\/\/(www\.)?youtube\.com\/watch\?v=[^&]+/;
+        if (youtubeRegex.test(tab.url)) {
+          console.log('Detected YouTube video URL, running YouTube code path');
+          statusElement.textContent = 'Detected YouTube video. Scraping transcript and description...';
+          // Use chrome.scripting to inject a YouTube-specific scraping function
+          chrome.scripting.executeScript(
+            {
+              target: { tabId: tab.id },
+              func: async function youtubeScrape() {
+                // Debug: log start
+                console.log('[YouTube Scraper] Running in page context');
+                // Get video title
+                let title = document.title;
+                // Get description from meta tag or description box
+                let description = '';
+                const metaDesc = document.querySelector('meta[name="description"]');
+                if (metaDesc) description = metaDesc.content;
+                // Try to get description from the page (if expanded)
+                const descBox = document.querySelector('#description yt-formatted-string');
+                if (descBox && descBox.textContent) description = descBox.textContent;
+                // Get thumbnail from meta tag only (revert to og:image method)
+                let thumbnail = '';
+                const metaThumb = document.querySelector('meta[property="og:image"]');
+                if (metaThumb) thumbnail = metaThumb.content;
+                // --- Transcript scraping logic ---
+                let transcript = '';
+                try {
+                  // Helper to wait for a selector
+                  async function waitForSelector(selector, timeout = 8000) {
+                    return new Promise((resolve, reject) => {
+                      const interval = 100;
+                      let waited = 0;
+                      const check = () => {
+                        const el = document.querySelector(selector);
+                        if (el) return resolve(el);
+                        waited += interval;
+                        if (waited >= timeout) return reject('Timeout waiting for ' + selector);
+                        setTimeout(check, interval);
+                      };
+                      check();
+                    });
                   }
+                  // Check if transcript is already open
+                  let transcriptSegments = document.querySelectorAll('ytd-transcript-segment-renderer');
+                  if (!transcriptSegments.length) {
+                    // Look for the Show transcript button inside the description area
+                    let showTranscriptBtn = Array.from(document.querySelectorAll('ytd-text-inline-expander a, ytd-text-inline-expander button, #description a, #description button')).find(
+                      el => el.textContent.trim().toLowerCase() === 'show transcript'
+                    );
+                    if (showTranscriptBtn) {
+                      showTranscriptBtn.click();
+                      // Wait for transcript panel to appear
+                      await waitForSelector('ytd-transcript-segment-renderer');
+                      // Give a little extra time for all segments to load
+                      await new Promise(res => setTimeout(res, 500));
+                    }
+                  }
+                  // After attempting to open, try to get transcript segments again
+                  transcriptSegments = document.querySelectorAll('ytd-transcript-segment-renderer');
+                  if (transcriptSegments.length > 0) {
+                    // Remove timestamps from each segment
+                    let cleanedSegments = Array.from(transcriptSegments).map(el => {
+                      // Remove leading timestamp (e.g., 0:00, 12:34, 1:23:45)
+                      let text = el.innerText.replace(/^	*\d{1,2}:\d{2}(?::\d{2})?\s*/g, '');
+                      // Also remove timestamps at the end if present
+                      text = text.replace(/\s*\d{1,2}:\d{2}(?::\d{2})?\s*$/, '');
+                      return text;
+                    });
+                    transcript = cleanedSegments.join('\n');
+                  }
+                } catch (err) {
+                  // Only log errors if transcript scraping fails
+                  console.log('[YouTube Scraper] Error while scraping transcript:', err);
+                }
+                // Return all scraped data
+                return {
+                  url: window.location.href,
+                  title,
+                  description,
+                  thumbnail,
+                  transcript
+                };
+              }
+            },
+            (results) => {
+              console.log('[YouTube Scraper] Script execution results:', results);
+              if (chrome.runtime.lastError) {
+                console.error('[YouTube Scraper] Script execution error:', chrome.runtime.lastError);
+                statusElement.textContent = 'Failed to scrape YouTube page.';
+                statusElement.classList.add('error');
+                importButton.disabled = false;
+                return;
+              }
+              if (results && results[0] && results[0].result) {
+                statusElement.textContent = 'Processing YouTube data...';
+                chrome.storage.local.set({
+                  'processingRecipe': true,
+                  'processingStartTime': Date.now()
+                }, () => {
+                  cancelButton.style.display = 'block';
+                  console.log('[YouTube Scraper] Sending YouTube data to background script:', {
+                    action: 'processYouTubeRecipe',
+                    data: results[0].result
+                  });
+                  chrome.runtime.sendMessage({
+                    action: 'processYouTubeRecipe',
+                    data: results[0].result
+                  }, response => {
+                    if (chrome.runtime.lastError) {
+                      console.error('[YouTube Scraper] Error sending message to background:', chrome.runtime.lastError);
+                    } else if (response) {
+                      console.log('[YouTube Scraper] Background script response:', response);
+                    } else {
+                      console.log('[YouTube Scraper] Message sent to background, no response');
+                    }
+                  });
                 });
-              });
-            } else {
-              statusElement.textContent = 'Failed to extract page content.';
-              statusElement.classList.add('error');
-              importButton.disabled = false;
+              } else {
+                statusElement.textContent = 'Failed to extract YouTube data.';
+                statusElement.classList.add('error');
+                importButton.disabled = false;
+              }
             }
-          }
-        );
+          );
+        } else {
+          // Normal code path for non-YouTube URLs
+          console.log('Non-YouTube URL, running normal code path');
+          chrome.scripting.executeScript(
+            {
+              target: { tabId: tab.id },
+              func: function() {
+                return {
+                  url: window.location.href,
+                  html: document.documentElement.outerHTML
+                };
+              }
+            },
+            (results) => {
+              console.log('Script execution results:', results);
+              if (chrome.runtime.lastError) {
+                console.error('Script execution error:', chrome.runtime.lastError);
+                statusElement.textContent = 'Cannot access this page content. Try a recipe website.';
+                statusElement.classList.add('error');
+                importButton.disabled = false;
+                return;
+              }
+              if (results && results[0] && results[0].result) {
+                statusElement.textContent = 'Processing... Please wait';
+                chrome.storage.local.set({
+                  'processingRecipe': true,
+                  'processingStartTime': Date.now()
+                }, () => {
+                  cancelButton.style.display = 'block';
+                  console.log('Sending data to background script:', {
+                    action: 'processRecipe',
+                    dataSize: JSON.stringify(results[0].result).length
+                  });
+                  chrome.runtime.sendMessage({
+                    action: 'processRecipe',
+                    data: results[0].result
+                  }, response => {
+                    if (chrome.runtime.lastError) {
+                      console.error('Error sending message to background:', chrome.runtime.lastError);
+                    } else if (response) {
+                      console.log('Background script response:', response);
+                    } else {
+                      console.log('Message sent to background, no response');
+                    }
+                  });
+                });
+              } else {
+                statusElement.textContent = 'Failed to extract page content.';
+                statusElement.classList.add('error');
+                importButton.disabled = false;
+              }
+            }
+          );
+        }
       } catch (err) {
         console.error('Error in click handler:', err);
         statusElement.textContent = err.message || 'An error occurred';
