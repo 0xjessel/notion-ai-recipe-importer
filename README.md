@@ -40,9 +40,11 @@ A Chrome extension that extracts recipes from any website with one click and imp
 ## Installation
 
 ### From Chrome Web Store
-*(Coming soon)*
+
+_(Coming soon)_
 
 ### Manual Installation
+
 1. Download this repository as a ZIP file and extract it
 2. Open Chrome and go to `chrome://extensions/`
 3. Enable "Developer mode" in the top right
@@ -56,8 +58,10 @@ Before using the extension, you need to configure:
 1. **Claude API Key**: Get an API key from [Anthropic](https://www.anthropic.com/)
 2. **Notion Integration Token**: Create an integration at [Notion Developers](https://www.notion.so/my-integrations)
 3. **Notion Database ID**: Copy the ID from your recipes database URL
+4. **YouTube Data API Key (Optional)**: Required only for importing from YouTube videos. Get an API key from the [Google Cloud Console](https://console.cloud.google.com/).
 
 To configure:
+
 1. Click the extension icon and select "Options"
 2. Enter your credentials
 3. Click "Save"
@@ -65,6 +69,7 @@ To configure:
 ## Notion Database Requirements
 
 Your Notion database should have:
+
 - A title property for the recipe name
 - A multi-select property for cuisine categories
 - Optionally, a URL property for the source
@@ -85,7 +90,8 @@ Your Notion database should have:
 ## Troubleshooting
 
 Common issues:
-- **API Key Invalid**: Ensure your Claude and Notion API keys are correctly entered
+
+- **API Key Invalid**: Ensure your Claude, Notion, and (if using YouTube import) YouTube API keys are correctly entered
 - **Import Failed**: Try refreshing the page or check if the site blocks content scraping
 - **Processing Stuck**: Use the cancel button and try again
 - **Missing Permissions**: Make sure you've shared your Notion database with your integration
@@ -93,6 +99,7 @@ Common issues:
 ## Development
 
 ### Project Structure
+
 ```
 notion-ai-recipe-importer/
 ├── css/             # Stylesheets
@@ -108,6 +115,7 @@ notion-ai-recipe-importer/
 ```
 
 ### Building from Source
+
 1. Clone the repository
 2. Make any desired changes
 3. Follow the manual installation steps above to test

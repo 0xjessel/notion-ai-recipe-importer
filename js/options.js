@@ -3,9 +3,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const claudeApiKeyInput = document.getElementById('claudeApiKey');
   const notionTokenInput = document.getElementById('notionToken');
   const notionDatabaseIdInput = document.getElementById('notionDatabaseId');
+  const youtubeApiKeyInput = document.getElementById('youtubeApiKey');
   const claudeApiKeyFeedback = document.getElementById('claudeApiKeyFeedback');
   const notionTokenFeedback = document.getElementById('notionTokenFeedback');
   const notionDatabaseIdFeedback = document.getElementById('notionDatabaseIdFeedback');
+  const youtubeApiKeyFeedback = document.getElementById('youtubeApiKeyFeedback');
   const testConnectionBtn = document.getElementById('testConnectionBtn');
   const statusElement = document.getElementById('status');
   const toggleButtons = document.querySelectorAll('.toggle-visibility');
@@ -27,10 +29,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Load saved settings
-  chrome.storage.sync.get(['claudeApiKey', 'notionToken', 'notionDatabaseId'], (result) => {
+  chrome.storage.sync.get(['claudeApiKey', 'notionToken', 'notionDatabaseId', 'youtubeApiKey'], (result) => {
     if (result.claudeApiKey) claudeApiKeyInput.value = result.claudeApiKey;
     if (result.notionToken) notionTokenInput.value = result.notionToken;
     if (result.notionDatabaseId) notionDatabaseIdInput.value = result.notionDatabaseId;
+    if (result.youtubeApiKey) youtubeApiKeyInput.value = result.youtubeApiKey;
   });
 
   // Validate Claude API Key format
@@ -73,6 +76,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Validate YouTube API Key format (basic check)
+  youtubeApiKeyInput.addEventListener('input', () => {
+    const value = youtubeApiKeyInput.value.trim();
+    if (value && !value.startsWith('AIza')) { // Common prefix for Google API keys
+      youtubeApiKeyInput.classList.add('invalid');
+      youtubeApiKeyFeedback.textContent = 'YouTube API Key often starts with "AIza"';
+    } else {
+      youtubeApiKeyInput.classList.remove('invalid');
+      youtubeApiKeyFeedback.textContent = '';
+    }
+  });
+
   // Save settings
   settingsForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -81,6 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const claudeApiKey = claudeApiKeyInput.value.trim();
     const notionToken = notionTokenInput.value.trim();
     const notionDatabaseId = notionDatabaseIdInput.value.trim();
+    const youtubeApiKey = youtubeApiKeyInput.value.trim();
     
     // Basic validation
     let isValid = true;
@@ -107,8 +123,13 @@ document.addEventListener('DOMContentLoaded', () => {
       isValid = false;
     }
     
+    if (youtubeApiKey && !youtubeApiKey.startsWith('AIza')) {
+      youtubeApiKeyInput.classList.add('invalid');
+      youtubeApiKeyFeedback.textContent = 'YouTube API Key often starts with "AIza"';
+    }
+    
     if (!isValid) {
-      showStatus('Please fix the errors before saving', 'error');
+      showStatus('Please fix the required field errors before saving', 'error');
       return;
     }
     
@@ -116,7 +137,8 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.sync.set({
       claudeApiKey,
       notionToken,
-      notionDatabaseId
+      notionDatabaseId,
+      youtubeApiKey
     }, () => {
       showStatus('Settings saved successfully!', 'success');
     });
@@ -128,10 +150,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const claudeApiKey = claudeApiKeyInput.value.trim();
     const notionToken = notionTokenInput.value.trim();
     const notionDatabaseId = notionDatabaseIdInput.value.trim();
+    const youtubeApiKey = youtubeApiKeyInput.value.trim();
     
     // Validate that all fields are filled
     if (!claudeApiKey || !notionToken || !notionDatabaseId) {
-      showStatus('Please fill in all fields first', 'error');
+      showStatus('Please fill in Claude & Notion fields to test connection', 'error');
       return;
     }
     
@@ -139,17 +162,28 @@ document.addEventListener('DOMContentLoaded', () => {
     showStatus('Testing connection...', '');
     testConnectionBtn.disabled = true;
     
+    let allTestsPassed = true;
+    let failureMessage = '';
+    
     try {
-      // Test Claude API
-      const claudeStatus = await testClaudeApi(claudeApiKey);
+      showStatus('Testing Claude API...', '');
+      await testClaudeApi(claudeApiKey);
+      showStatus('Claude API OK. Testing Notion API...', '');
+      await testNotionApi(notionToken, notionDatabaseId);
       
-      // Test Notion API
-      const notionStatus = await testNotionApi(notionToken, notionDatabaseId);
+      // Test YouTube API only if key is provided
+      if (youtubeApiKey) {
+        showStatus('Notion API OK. Testing YouTube API...', '');
+        await testYouTubeApi(youtubeApiKey);
+        showStatus('All connections successful!', 'success');
+      } else {
+        showStatus('Claude & Notion connections successful! (YouTube key not provided)', 'success');
+      }
       
-      // Both tests passed
-      showStatus('Connection successful! All APIs are working.', 'success');
     } catch (error) {
-      showStatus(`Connection failed: ${error.message}`, 'error');
+      allTestsPassed = false;
+      failureMessage = error.message;
+      showStatus(`Connection failed: ${failureMessage}`, 'error');
     } finally {
       testConnectionBtn.disabled = false;
     }
@@ -228,6 +262,41 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     } catch (error) {
       throw new Error(`Notion API: ${error.message}`);
+    }
+  }
+
+  // Test YouTube API connection
+  async function testYouTubeApi(apiKey) {
+    // Use a common, well-known video ID for testing
+    const testVideoId = 'dQw4w9WgXcQ'; // Rick Astley - Never Gonna Give You Up
+    const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${testVideoId}&key=${apiKey}`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        let errorDetail = response.statusText;
+        try {
+          const errorData = await response.json();
+          errorDetail = errorData.error?.message || errorDetail;
+        } catch (e) { /* Ignore if response body is not JSON */ }
+        throw new Error(`YouTube API error: ${errorDetail} (Status ${response.status})`);
+      }
+      
+      // Check if we got data back
+      const data = await response.json();
+      if (!data.items || data.items.length === 0) {
+        throw new Error('YouTube API returned no items for test video');
+      }
+      
+      return true;
+    } catch (error) {
+      throw new Error(`YouTube API: ${error.message}`);
     }
   }
 
