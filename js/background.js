@@ -1,19 +1,29 @@
 // Processing cancellation flag
 let isCancelled = false;
 
+// Helper to get cuisine options (DRY for all sources)
+async function getOrFetchCuisineOptions() {
+  let cuisineOptions = await getCuisineOptionsFromCache();
+  if (!cuisineOptions || cuisineOptions.length === 0) {
+    const { notionToken, notionDatabaseId } = await chrome.storage.sync.get(['notionToken', 'notionDatabaseId']);
+    if (notionToken && notionDatabaseId) {
+      cuisineOptions = await fetchCuisineOptionsFromNotion(notionToken, notionDatabaseId);
+      await chrome.storage.local.set({
+        cuisineOptionsCache: cuisineOptions,
+        cuisineOptionsCacheTime: Date.now()
+      });
+    }
+  }
+  return cuisineOptions;
+}
+
 // Process recipe data and interact with Claude API
-async function processRecipe(recipeData, tabId) {
-  console.log('processRecipe function called with data:', recipeData ? typeof recipeData : 'no data');
-  
-  // Validate input data
+async function processRecipe(recipeData, tabId, sourceType = 'website') {
   if (!recipeData || typeof recipeData !== 'object') {
-    console.error('Invalid recipe data received:', recipeData);
     updateProcessingStatus('error', 'Invalid recipe data received', tabId);
     return;
   }
-  
   try {
-    // Store processing state
     const processingStartTime = Date.now();
     await chrome.storage.local.set({ 
       processingRecipe: true,
@@ -23,28 +33,155 @@ async function processRecipe(recipeData, tabId) {
     // Get Notion API credentials from storage
     const { notionToken, notionDatabaseId } = await chrome.storage.sync.get(['notionToken', 'notionDatabaseId']);
     
-    // First, check if we need to get available cuisine options from cache
-    let cuisineOptions = await getCuisineOptionsFromCache();
-    
-    // If no cached options, fetch from Notion
-    if (!cuisineOptions || cuisineOptions.length === 0) {
-      console.log('No cached cuisine options, fetching from Notion');
-      if (notionToken && notionDatabaseId) {
-        cuisineOptions = await fetchCuisineOptionsFromNotion(notionToken, notionDatabaseId);
-        
-        // Cache the options for future use
-        await chrome.storage.local.set({ 
-          cuisineOptionsCache: cuisineOptions,
-          cuisineOptionsCacheTime: Date.now()
-        });
-      }
-    }
+    // DRY: Get cuisine options once for all sources
+    const cuisineOptions = await getOrFetchCuisineOptions();
     
     // Update status to extracting
     updateProcessingStatus('extracting', 'Extracting recipe data with Claude...', tabId);
     
+    // Show extracted values before LLM
+    console.log('[Recipe] Extracted values before LLM:', recipeData);
+    
+    // Extract meta/og tags from HTML and attach to recipeData
+    if (sourceType === 'website' && recipeData.html) {
+      // This function is now only in popup.js, so skip here
+    }
+    
+    // Choose prompt builder based on sourceType
+    let promptBuilder = null;
+    if (sourceType === 'youtube') {
+      promptBuilder = (ytData, cuisineOptions) => `
+You are a precise and reliable recipe parser for a Chrome extension. Your job is to extract structured recipe data from YouTube videos. The video description and transcript are provided below. Focus only on the core recipe, ignoring irrelevant content such as personal stories, ads, or unrelated commentary.
+
+Analyze the provided YouTube video data and extract the following fields:
+
+name — the exact recipe name as written in the video or description. If the name is not explicit, make your best guess based on the text provided. Do NOT use the field 'title' anywhere in the output, only use 'name'.
+cuisine — deduce the most appropriate cuisine from this fixed list:
+${cuisineOptions.join(', ')}
+Only create a new value if none of these match reasonably.
+imageUrl — a direct link to the video thumbnail
+ingredients — an array of objects with the following structure:
+- For regular ingredients: { "text": "2 cups flour", "isHeader": false }
+- For section headers: { "text": "For the sauce:", "isHeader": true }
+Preserve the exact wording and order as written in the video or description. Section headers are things like "For the sauce:", etc.
+directions — an array of objects with the following structure:
+- For regular steps: { "text": "Mix flour and water", "isHeader": false }
+- For section headers: { "text": "Make the Burger Sauce:", "isHeader": true }
+Preserve the exact wording and order as written in the video or description. Section headers are things like "Make the Burger Sauce:", etc.
+url — the YouTube video URL
+
+Return only a valid JSON object in this exact structure:
+{
+  "name": "string",
+  "cuisine": "string",
+  "imageUrl": "string",
+  "ingredients": [{ "text": "string", "isHeader": boolean }, ...],
+  "directions": [{ "text": "string", "isHeader": boolean }, ...],
+  "url": "string"
+}
+
+Do not add any extra commentary, explanations, markdown, or fields. If a field is missing, return an empty string or an empty array.
+
+YouTube Video Data:
+Title: ${ytData.title || ''}
+Description: ${ytData.description || ''}
+Transcript: ${ytData.transcript || ''}
+Thumbnail: ${ytData.thumbnail || ''}
+URL: ${ytData.url || ''}
+`;
+    } else if (sourceType === 'instagram') {
+      promptBuilder = (instaData, cuisineOptions) => `
+You are a precise and reliable recipe parser for a Chrome extension. Your job is to extract structured recipe data from Instagram posts. The post caption is provided below. Focus only on the core recipe, ignoring irrelevant content such as personal stories, hashtags, or unrelated commentary.
+
+Analyze the provided Instagram post data and extract the following fields:
+
+name — the exact recipe name as written in the post or caption. If the name is not explicit, make your best guess based on the text provided. Do NOT use the field 'title' anywhere in the output, only use 'name'.
+cuisine — deduce the most appropriate cuisine from this fixed list:
+${cuisineOptions.join(', ')}
+Only create a new value if none of these match reasonably.
+imageUrl — a direct link to the post image
+ingredients — an array of objects with the following structure:
+- For regular ingredients: { "text": "2 cups flour", "isHeader": false }
+- For section headers: { "text": "For the sauce:", "isHeader": true }
+Preserve the exact wording and order as written in the post. Section headers are things like "For the sauce:", etc.
+directions — an array of objects with the following structure:
+- For regular steps: { "text": "Mix flour and water", "isHeader": false }
+- For section headers: { "text": "Make the Burger Sauce:", "isHeader": true }
+Preserve the exact wording and order as written in the post. Section headers are things like "Make the Burger Sauce:", etc.
+url — the Instagram post URL
+
+Return only a valid JSON object in this exact structure:
+{
+  "name": "string",
+  "cuisine": "string",
+  "imageUrl": "string",
+  "ingredients": [{ "text": "string", "isHeader": boolean }, ...],
+  "directions": [{ "text": "string", "isHeader": boolean }, ...],
+  "url": "string"
+}
+
+Do not add any extra commentary, explanations, markdown, or fields. If a field is missing, return an empty string or an empty array.
+
+Instagram Post Data:
+Caption: ${instaData.caption || ''}
+Image: ${instaData.imageUrl || ''}
+URL: ${instaData.url || ''}
+`;
+    } else if (sourceType === 'website') {
+      promptBuilder = (recipeData, cuisineOptions) => {
+        const url = recipeData.url || '';
+        const html = recipeData.html || '';
+        const simplifiedHtml = simplifyHtml(html);
+        const cuisineList = (cuisineOptions && cuisineOptions.length > 0)
+          ? cuisineOptions
+          : [
+              "Chinese", "Mexican", "African", "Thai", "Korean", "Indian", "Filipino",
+              "Mediterranean", "Caribbean", "Soups", "Brunch", "American", "Hawaiian",
+              "South America", "Italian", "Japanese"
+            ];
+        return `
+You are a precise and reliable recipe parser for a Chrome extension. Your job is to extract structured recipe data from real-world cooking websites. These pages often contain irrelevant content such as personal stories, ads, comments, nutritional info, or videos — ignore all of that. Focus only on the core recipe.
+
+Analyze the HTML content below and extract the following fields:
+
+name — the exact recipe name as written on the page
+
+cuisine — deduce the most appropriate cuisine from this fixed list:
+${cuisineList.join(', ')}
+Only create a new value if none of these match reasonably.
+
+imageUrl — a direct link to the main image showing what the final dish looks like
+
+ingredients — an array of objects with the following structure:
+- For regular ingredients: { "text": "2 cups flour", "isHeader": false }
+- For section headers: { "text": "For the sauce:", "isHeader": true }
+Preserve the exact wording and order as written on the page. Section headers are things like "For the sauce:", "Veggies and rice cakes", etc.
+
+directions — an array of objects with the following structure:
+- For regular steps: { "text": "Mix flour and water", "isHeader": false }
+- For section headers: { "text": "Make the Burger Sauce:", "isHeader": true }
+Preserve the exact wording and order as written on the page. Section headers are things like "Make the Burger Sauce:", "Cook the Beef", etc.
+
+Return only a valid JSON object in this exact structure: 
+{
+  "name": "string", 
+  "cuisine": "string", 
+  "imageUrl": "string", 
+  "ingredients": [{ "text": "string", "isHeader": boolean }, ...], 
+  "directions": [{ "text": "string", "isHeader": boolean }, ...],
+  "url": "${url}"
+}
+
+Do not add any extra commentary, explanations, markdown, or fields. If a field is missing, return an empty string or an empty array.
+
+HTML Content:
+${simplifiedHtml}
+`;
+      };
+    }
+    
     // Call Claude API with recipe data and cuisine options
-    const recipeJson = await extractRecipeWithClaude(recipeData, cuisineOptions);
+    const recipeJson = await extractRecipeWithClaude(recipeData, cuisineOptions, promptBuilder);
     
     if (isCancelled) {
       console.log('Processing was cancelled, stopping');
@@ -53,6 +190,9 @@ async function processRecipe(recipeData, tabId) {
     
     // Update status to importing
     updateProcessingStatus('importing', 'Importing recipe to Notion...', tabId);
+    
+    // Show Notion import result
+    console.log('[Recipe] Notion import result:', recipeJson);
     
     // Call Notion API with extracted data
     // This would be implemented with actual Notion API calls
@@ -145,105 +285,31 @@ function updateProcessingStatus(status, message, tabId) {
 }
 
 // Extract recipe data using Claude API
-async function extractRecipeWithClaude(recipeData, cuisineOptions = []) {
-  console.log('Calling Claude API to extract recipe data');
-  
-  // Get Claude API key from storage
+async function extractRecipeWithClaude(recipeData, cuisineOptions = [], promptBuilder = null) {
   const { claudeApiKey } = await chrome.storage.sync.get(['claudeApiKey']);
-  
   if (!claudeApiKey) {
     throw new Error('Claude API key not configured');
   }
-  
-  // Retry settings
   const maxRetries = 3;
-  const retryDelay = 2000; // 2 seconds
-  
-  // Prepare the prompt for Claude
-  const url = recipeData.url || '';
-  const html = recipeData.html || '';
-  
-  // Create a simplified version of the HTML to reduce token usage
-  const simplifiedHtml = simplifyHtml(html);
-  
-  // Default cuisine list to use if no options from Notion
-  const defaultCuisines = [
-    "Chinese", "Mexican", "African", "Thai", "Korean", "Indian", "Filipino", 
-    "Mediterranean", "Caribbean", "Soups", "Brunch", "American", "Hawaiian", 
-    "South America", "Italian", "Japanese"
-  ];
-  
-  // Use cuisine options from Notion if available, otherwise use defaults
-  const cuisineList = (cuisineOptions && cuisineOptions.length > 0) ? cuisineOptions : defaultCuisines;
-  
-  // Create the prompt for Claude
-  const prompt = `
-You are a precise and reliable recipe parser for a Chrome extension. Your job is to extract structured recipe data from real-world cooking websites. These pages often contain irrelevant content such as personal stories, ads, comments, nutritional info, or videos — ignore all of that. Focus only on the core recipe.
-
-Analyze the HTML content below and extract the following fields:
-
-name — the exact recipe name as written on the page
-
-cuisine — deduce the most appropriate cuisine from this fixed list:
-${cuisineList.join(', ')}
-Only create a new value if none of these match reasonably.
-
-imageUrl — a direct link to the main image showing what the final dish looks like
-
-ingredients — an array of objects with the following structure:
-- For regular ingredients: { "text": "2 cups flour", "isHeader": false }
-- For section headers: { "text": "For the sauce:", "isHeader": true }
-Preserve the exact wording and order as written on the page. Section headers are things like "For the sauce:", "Veggies and rice cakes", etc.
-
-directions — an array of objects with the following structure:
-- For regular steps: { "text": "Mix flour and water", "isHeader": false }
-- For section headers: { "text": "Make the Burger Sauce:", "isHeader": true }
-Preserve the exact wording and order as written on the page. Section headers are things like "Make the Burger Sauce:", "Cook the Beef", etc.
-
-Return only a valid JSON object in this exact structure: 
-{
-  "name": "string", 
-  "cuisine": "string", 
-  "imageUrl": "string", 
-  "ingredients": [{ "text": "string", "isHeader": boolean }, ...], 
-  "directions": [{ "text": "string", "isHeader": boolean }, ...],
-  "url": "${url}"
-}
-
-Do not add any extra commentary, explanations, markdown, or fields. If a field is missing, return an empty string or an empty array.
-
-HTML Content:
-${simplifiedHtml}
-`;
-
-  // Function to sleep for a specified time
+  const retryDelay = 2000;
+  let prompt = '';
+  if (promptBuilder && typeof promptBuilder === 'function') {
+    prompt = promptBuilder(recipeData, cuisineOptions);
+  }
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-  
-  // Retry logic
   let lastError = null;
-  
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      // Check if cancelled before making API call
       if (isCancelled) {
         throw new Error('Processing cancelled by user');
       }
-      
-      // Only log on first attempt or after retries
-      if (attempt === 0) {
-        console.log('Sending request to Claude API');
-      } else {
-        console.log(`Retry attempt ${attempt+1}/${maxRetries} for Claude API request`);
-      }
-      
-      // Call Claude API with CORS header
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': claudeApiKey,
           'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'yes' // Required CORS header
+          'anthropic-dangerous-direct-browser-access': 'yes'
         },
         body: JSON.stringify({
           model: 'claude-3-7-sonnet-20250219',
@@ -256,78 +322,50 @@ ${simplifiedHtml}
           ]
         })
       });
-      
-      // Check if cancelled after API call
       if (isCancelled) {
         throw new Error('Processing cancelled by user');
       }
-      
-      console.log('Claude API response status:', response.status);
-      
-      // Handle overloaded errors (retry)
-      if (response.status === 529) {
-        const errorData = await response.text();
-        console.log(`Claude API overloaded (attempt ${attempt+1}/${maxRetries}):`, errorData);
-        lastError = new Error(`Claude API overloaded (status 529)`);
-        
-        // Wait before retrying, unless this is the last attempt
-        if (attempt < maxRetries - 1) {
-          const waitTime = retryDelay * (attempt + 1); // Exponential backoff
-          console.log(`Waiting ${waitTime}ms before retry...`);
-          await sleep(waitTime);
-          continue; // Try again
-        }
-      }
-      
-      // Handle other errors (don't retry)
       if (!response.ok) {
         const errorData = await response.text();
-        console.error('Claude API error:', errorData);
-        throw new Error(`Claude API error: ${response.status} ${response.statusText}`);
+        console.error('[Claude] API error:', errorData);
+        throw new Error(`[Claude] API error: ${response.status} ${response.statusText}`);
       }
-      
       const data = await response.json();
-      console.log('Claude API response received');
-      
-      // Extract JSON from Claude's response
       const content = data.content;
-      
       if (!content || !content[0] || !content[0].text) {
-        throw new Error('Invalid response from Claude API');
+        throw new Error('[Claude] Invalid response from Claude API');
       }
-      
       const responseText = content[0].text;
-      
-      // Try to extract JSON from the response
-      let recipeJson = extractJsonFromText(responseText);
-      
-      if (!recipeJson) {
-        throw new Error('Could not parse recipe data from Claude response');
+      let recipeJson = null;
+      try {
+        recipeJson = JSON.parse(responseText);
+      } catch (e) {
+        const match = responseText.match(/\{[\s\S]*\}/);
+        if (match) {
+          try {
+            recipeJson = JSON.parse(match[0]);
+          } catch (e2) {}
+        }
       }
-      
-      console.log('Successfully extracted recipe data:', recipeJson);
+      if (!recipeJson) {
+        throw new Error('[Claude] Could not parse recipe data from response');
+      }
+      // Show Claude response (success)
+      console.log('[Claude] Response:', recipeJson);
       return recipeJson;
-      
     } catch (error) {
-      // Save the error to throw if all retries fail
       lastError = error;
-      
-      // If it's not a 529 error or it's the last retry, don't try again
       if (error.message && !error.message.includes('overloaded') && !error.message.includes('529')) {
         break;
       }
-      
-      // Wait before retrying, unless this is the last attempt
       if (attempt < maxRetries - 1) {
-        const waitTime = retryDelay * (attempt + 1); // Exponential backoff
-        console.log(`Waiting ${waitTime}ms before retry...`);
+        const waitTime = retryDelay * (attempt + 1);
         await sleep(waitTime);
       }
     }
   }
-  
-  // If we got here, all retries failed
-  console.error('Error extracting recipe with Claude after all retries:', lastError);
+  // Show Claude response (failure)
+  console.error('[Claude] Failed to extract recipe data:', lastError);
   throw lastError || new Error('Failed to extract recipe data after multiple attempts');
 }
 
@@ -916,28 +954,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'contentScriptLoaded' && sender.tab) {
     console.log('Content script loaded in tab:', sender.tab.id);
     sendResponse({status: 'acknowledged'});
-  } else if (message.action === 'processRecipe') {
-    // Reset cancellation flag when starting a new process
+  } else if (message.action === 'processYouTubeRecipe') {
     isCancelled = false;
-    
     const tabId = sender.tab ? sender.tab.id : null;
-    console.log('Processing recipe from', sender.tab ? `tab: ${tabId}` : 'popup');
-    console.log('Recipe data size:', message.data ? JSON.stringify(message.data).length : 'no data');
-    
-    // Send immediate response
     sendResponse({status: 'processing'});
-    
-    // Start processing
-    processRecipe(message.data, tabId);
+    processRecipe(message.data, tabId, 'youtube');
+  } else if (message.action === 'processRecipe') {
+    isCancelled = false;
+    const tabId = sender.tab ? sender.tab.id : null;
+    sendResponse({status: 'processing'});
+    processRecipe(message.data, tabId, 'website');
+  } else if (message.action === 'processInstagramRecipe') {
+    isCancelled = false;
+    const tabId = sender.tab ? sender.tab.id : null;
+    sendResponse({status: 'processing'});
+    processRecipe(message.data, tabId, 'instagram');
   } else if (message.action === 'cancelProcessing') {
     console.log('Cancelling recipe processing');
     isCancelled = true;
-    
-    // Clear the processing state
     chrome.storage.local.remove(['processingRecipe', 'processingStartTime'], () => {
       console.log('Processing state cleared due to cancellation');
-      
-      // Show notification for canceled operation
       chrome.notifications.create({
         type: 'basic',
         iconUrl: chrome.runtime.getURL('images/icon128.png'),

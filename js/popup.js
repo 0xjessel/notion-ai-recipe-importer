@@ -188,6 +188,8 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Active tab URL:', tab.url);
         // Check if this is a YouTube video URL
         const youtubeRegex = /^https:\/\/(www\.)?youtube\.com\/watch\?v=[^&]+/;
+        // Check if this is an Instagram post URL
+        const instagramRegex = /^https:\/\/(www\.)?instagram\.com\/p\//;
         if (youtubeRegex.test(tab.url)) {
           console.log('Detected YouTube video URL, running YouTube code path');
           statusElement.textContent = 'Detected YouTube video. Scraping transcript and description...';
@@ -311,9 +313,84 @@ document.addEventListener('DOMContentLoaded', () => {
               }
             }
           );
+        } else if (instagramRegex.test(tab.url)) {
+          console.log('Detected Instagram post URL, running Instagram code path');
+          statusElement.textContent = 'Detected Instagram post. Scraping post text...';
+          chrome.scripting.executeScript(
+            {
+              target: { tabId: tab.id },
+              func: function instagramScrape() {
+                // Use meta/og tags for caption and image
+                function extractMetaOgTags(html) {
+                  if (!html || typeof html !== 'string') return {};
+                  const doc = new DOMParser().parseFromString(html, 'text/html');
+                  const getMeta = (name) => {
+                    const el = doc.querySelector(`meta[name='${name}']`);
+                    return el ? el.content : '';
+                  };
+                  const getOg = (property) => {
+                    const el = doc.querySelector(`meta[property='og:${property}']`);
+                    return el ? el.content : '';
+                  };
+                  return {
+                    metaDescription: getMeta('description'),
+                    ogTitle: getOg('title'),
+                    ogDescription: getOg('description'),
+                    ogImage: getOg('image'),
+                  };
+                }
+                const html = document.documentElement.outerHTML;
+                const metaOg = extractMetaOgTags(html);
+                return {
+                  url: window.location.href,
+                  caption: metaOg.ogDescription || '',
+                  imageUrl: metaOg.ogImage || ''
+                };
+              }
+            },
+            (results) => {
+              console.log('[Instagram Scraper] Script execution results:', results);
+              if (chrome.runtime.lastError) {
+                console.error('[Instagram Scraper] Script execution error:', chrome.runtime.lastError);
+                statusElement.textContent = 'Failed to scrape Instagram post.';
+                statusElement.classList.add('error');
+                importButton.disabled = false;
+                return;
+              }
+              if (results && results[0] && results[0].result) {
+                statusElement.textContent = 'Processing Instagram post...';
+                chrome.storage.local.set({
+                  'processingRecipe': true,
+                  'processingStartTime': Date.now()
+                }, () => {
+                  cancelButton.style.display = 'block';
+                  console.log('[Instagram Scraper] Sending Instagram data to background script:', {
+                    action: 'processInstagramRecipe',
+                    data: results[0].result
+                  });
+                  chrome.runtime.sendMessage({
+                    action: 'processInstagramRecipe',
+                    data: results[0].result
+                  }, response => {
+                    if (chrome.runtime.lastError) {
+                      console.error('[Instagram Scraper] Error sending message to background:', chrome.runtime.lastError);
+                    } else if (response) {
+                      console.log('[Instagram Scraper] Background script response:', response);
+                    } else {
+                      console.log('[Instagram Scraper] Message sent to background, no response');
+                    }
+                  });
+                });
+              } else {
+                statusElement.textContent = 'Failed to extract Instagram post.';
+                statusElement.classList.add('error');
+                importButton.disabled = false;
+              }
+            }
+          );
         } else {
-          // Normal code path for non-YouTube URLs
-          console.log('Non-YouTube URL, running normal code path');
+          // Normal code path for non-YouTube and non-Instagram URLs
+          console.log('Non-YouTube and non-Instagram URL, running normal code path');
           chrome.scripting.executeScript(
             {
               target: { tabId: tab.id },

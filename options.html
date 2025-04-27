@@ -43,17 +43,6 @@
         <div class="input-feedback" id="notionDatabaseIdFeedback"></div>
       </div>
       
-      <div class="form-group">
-        <label for="youtubeApiKey">YouTube Data API Key (Optional)</label>
-        <div class="input-container">
-          <input type="password" id="youtubeApiKey" name="youtubeApiKey" placeholder="AIza...">
-          <button type="button" class="toggle-visibility" data-for="youtubeApiKey">
-            <span class="eye-icon">•••</span>
-          </button>
-        </div>
-        <div class="input-feedback" id="youtubeApiKeyFeedback"></div>
-      </div>
-      
       <div class="buttons-row">
         <button type="button" id="testConnectionBtn">Test Connection</button>
         <button type="submit" id="saveBtn">Save Settings</button>
@@ -91,19 +80,6 @@
            - Select "Add connections"<br>
            - Find and select your integration (the one you created at notion.so/my-integrations)<br>
            - Without this step, the extension cannot access your database
-      </p>
-      
-      <h3>YouTube Data API Key</h3>
-      <p>
-        This is required for importing recipes from YouTube videos.
-        1. Go to <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a><br>
-        2. Create a new project (or select an existing one)<br>
-        3. Go to "APIs & Services" > "Library"<br>
-        4. Search for and enable "YouTube Data API v3"<br>
-        5. Go to "APIs & Services" > "Credentials"<br>
-        6. Click "Create Credentials" > "API Key"<br>
-        7. Copy the generated API key (it often starts with "AIza...")<br>
-        8. (Recommended) Click on the new API key name, go to "API restrictions" and restrict the key to "YouTube Data API v3".
       </p>
     </div>
   </div>

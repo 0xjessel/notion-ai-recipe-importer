@@ -11,8 +11,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Get the current URL and HTML content
     const url = window.location.href;
     const htmlContent = document.documentElement.outerHTML;
-    
-    // Send the data to the background script for processing
+
+    // Only send url and html to the background script
     chrome.runtime.sendMessage({
       action: 'processRecipe',
       data: {

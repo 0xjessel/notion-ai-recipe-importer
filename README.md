@@ -25,15 +25,20 @@ A Chrome extension that extracts recipes from any website with one click and imp
 
 - **One-Click Recipe Import**: Extract and save recipes to Notion with a single click
 - **Smart Extraction**: Uses Claude AI to accurately extract recipe details from any website
+- **Instagram Recipe Support**: Extract recipes from Instagram posts if the ingredients and directions are in the caption
+- **YouTube Recipe Support**: Create recipes from YouTube videos by analyzing the transcript and description
 - **Structured Notion Pages**: Creates well-formatted Notion pages with ingredients, directions, images, and more
 - **Background Processing**: Continues working even when the popup is closed
 - **Desktop Notifications**: Get notified when imports complete, fail, or are canceled
 
 ## How It Works
 
-1. Visit a recipe website you want to save
+1. Visit a recipe website, YouTube video, or Instagram post you want to save
 2. Click the extension icon in your browser
-3. The extension extracts the recipe using Claude AI
+3. The extension extracts the recipe using Claude AI:
+   - For websites: Extracts from the page content
+   - For YouTube: Retrieves the transcript and description to extract the recipe
+   - For Instagram: Extracts from the post caption and image if a recipe is present
 4. A new page is created in your Notion database with all recipe details
 5. Receive a desktop notification when the import is complete
 
@@ -58,7 +63,6 @@ Before using the extension, you need to configure:
 1. **Claude API Key**: Get an API key from [Anthropic](https://www.anthropic.com/)
 2. **Notion Integration Token**: Create an integration at [Notion Developers](https://www.notion.so/my-integrations)
 3. **Notion Database ID**: Copy the ID from your recipes database URL
-4. **YouTube Data API Key (Optional)**: Required only for importing from YouTube videos. Get an API key from the [Google Cloud Console](https://console.cloud.google.com/).
 
 To configure:
 
@@ -86,6 +90,8 @@ Your Notion database should have:
 - The extension requires an active internet connection
 - Claude AI and Notion API usage may incur costs based on your subscription
 - Images are imported via URL reference (not downloaded and uploaded to Notion)
+- Instagram extraction works only if the recipe (ingredients and directions) is present in the post caption
+- YouTube extraction works best for videos with clear recipe steps in the transcript or description
 
 ## Troubleshooting
 
