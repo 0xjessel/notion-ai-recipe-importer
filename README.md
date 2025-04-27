@@ -145,7 +145,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 We're considering several enhancements for future versions:
 
 - **Mobile-Friendly Solution**: Develop a mobile app or progressive web app to capture recipes on mobile devices
-- **Video Recipe Support**: Add support for extracting recipes from YouTube cooking videos and Instagram Reels/Stories
 - **Offline Mode**: Allow saving recipes locally when offline and syncing to Notion later
 - **Custom Templates**: Let users define their own Notion page templates for imported recipes
 - **Batch Import**: Support importing multiple recipes at once from bookmark collections
