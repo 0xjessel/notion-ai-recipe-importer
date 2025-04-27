@@ -1,6 +1,6 @@
 # Privacy Policy for Notion AI Recipe Importer
 
-**Effective date:** 2024-06-11
+**Effective date:** 2025-04-26
 
 This Chrome extension does not collect, store, or transmit any personally identifiable information. All processing happens locally in your browser or directly between your browser and third-party APIs (Anthropic Claude, Notion API). No data is sent to any server controlled by the extension author.
 
